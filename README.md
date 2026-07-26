@@ -5,7 +5,20 @@ endpoint, directly from the browser.** No backend server, no accounts, no stored
 you paste your Runpod API key into the page (kept in your browser's localStorage only)
 and Runpod itself rejects anyone without it.
 
-**Status: P1 — docs refined (2× review pass); pod validation of the model stack in progress.**
+**Status: LIVE.** Model stack pod-validated → serverless worker + endpoint verified end-to-end
+(upscale / list / fetch / errors) with weights served from Runpod's model cache → single-file
+frontend verified in a real browser → published on GitHub Pages.
+
+## Live site → **https://justinwlin.github.io/upscaler/**
+
+Quickstart:
+1. Open the site → **Settings** → paste your **Runpod API key** + your **endpoint id** → Save.
+2. **Upscale** tab → drop / choose / paste an image → pick scale + face-enhance → **Upscale**.
+3. First run after idle cold-starts a GPU worker (~1–2 min); warm runs are ~1 s.
+4. **Recent** tab shows your last ~48 h of results from any device (same key + endpoint id).
+
+Deploy your own endpoint: see `scripts/deploy.sh` (build image → serverless template → endpoint
+with `--model-reference`). The key/endpoint id are entered in the browser — never committed.
 
 ## Read order
 1. **`MODELS.md`** — model research: Real-ESRGAN+GFPGAN default (permissive licenses),
