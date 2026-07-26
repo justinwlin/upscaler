@@ -348,10 +348,12 @@ def handler(job):
             return do_fetch(inp)
         raise UpErr("bad_mode", "unknown mode: %s" % mode)
     except UpErr as e:
-        return {"error": {"code": e.code, "message": e.message}}
+        # NOTE: do NOT use a top-level "error" key — the Runpod SDK reserves it and drops the
+        # payload from /status. Return a plain error envelope under "ok/code/message" instead.
+        return {"ok": False, "code": e.code, "message": e.message}
     except Exception as e:
         traceback.print_exc()
-        return {"error": {"code": "internal", "message": str(e)}}
+        return {"ok": False, "code": "internal", "message": str(e)}
 
 
 if __name__ == "__main__" and os.environ.get("MODE_TO_RUN", "serverless") == "serverless":

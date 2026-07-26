@@ -24,7 +24,7 @@ def main():
     r = H.handler({"id": "test-%d" % int(time.time()), "input": {
         "mode": "upscale", "image_b64": b64_of(img_path), "scale": 4,
         "face_enhance": True, "model": "realesrgan", "output": "png"}})
-    assert "error" not in r, r
+    assert r.get("ok") is not False, r
     print("upscale %.2fs" % (time.time() - t0),
           {k: r[k] for k in ("job_dir", "in_width", "in_height", "width", "height", "bytes")},
           "inline:", r["image_b64"] is not None, "thumb_kb:", len(r["thumb_b64"]) // 1000)
@@ -32,7 +32,7 @@ def main():
 
     # 2) list
     lr = H.handler({"input": {"mode": "list"}})
-    assert "error" not in lr, lr
+    assert lr.get("ok") is not False, lr
     print("list ->", len(lr["jobs"]), "job(s); newest:", lr["jobs"][0]["job_dir"] if lr["jobs"] else None)
 
     # 3) fetch in 1.5MB slices, reassemble, verify size + sha
@@ -40,7 +40,7 @@ def main():
     off, parts = 0, []
     while True:
         fr = H.handler({"input": {"mode": "fetch", "job_dir": job_dir, "offset": off, "length": 1_572_864}})
-        assert "error" not in fr, fr
+        assert fr.get("ok") is not False, fr
         parts.append(base64.b64decode(fr["data_b64"])); off += fr["bytes"]
         if fr["eof"]:
             break
@@ -53,8 +53,7 @@ def main():
     e2 = H.handler({"input": {"mode": "upscale", "image_b64": b64_of(img_path),
                               "model": "aurasr", "face_enhance": True}})
     e3 = H.handler({"input": {"mode": "fetch", "job_dir": "does-not-exist"}})
-    print("errors:", e1.get("error", {}).get("code"), e2.get("error", {}).get("code"),
-          e3.get("error", {}).get("code"))
+    print("errors:", e1.get("code"), e2.get("code"), e3.get("code"))
     print("ALL_OK")
 
 

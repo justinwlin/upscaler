@@ -72,10 +72,13 @@ So the browser can POST to the endpoint directly. That means:
 //    server CLAMPS: B = min(length, total-offset); offset==total -> bytes:0, eof:true (NOT an error);
 //    eof true when offset+B == total. total == the `bytes` field from upscale/list (client loop invariant).
 
-// EVERY mode shares one error envelope (also returned on FAILED jobs):
-// -> {"error": {"code": "...", "message": "..."}}
+// EVERY mode shares one error envelope in the job OUTPUT (also parse-able on FAILED jobs):
+// -> {"ok": false, "code": "...", "message": "..."}
 //    codes: bad_mode | bad_params | decode_failed | too_many_pixels | oom
-//         | model_load_failed | not_found (fetch/list on a purged or unknown job_dir)
+//         | model_load_failed | not_found (fetch/list on a purged or unknown job_dir) | internal
+//    ⚠ do NOT put a top-level "error" key in the handler's return: the Runpod SDK RESERVES it and
+//      drops the payload from /status (verified live 2026-07-26 — a returned {"error":…} came back
+//      COMPLETED with no output at all). Success returns the normal dict (no "ok" field).
 ```
 
 **Handler contract details (all validated in P1, closing reviewer gaps):**

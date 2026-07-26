@@ -114,7 +114,7 @@
         <div><label>Scale</label><div class="seg" id="segScale">
           <button data-v="2">2×</button><button data-v="4" class="on">4×</button></div></div>
         <div><label>Model</label><div class="seg" id="segModel">
-          <button data-v="realesrgan" class="on">Real-ESRGAN</button><button data-v="aurasr">AuraSR</button></div></div>
+          <button data-v="realesrgan" class="on">Real-ESRGAN</button><button data-v="aurasr" disabled title="coming soon">AuraSR (soon)</button></div></div>
         <div><label>Face enhance</label><div class="seg" id="segFace">
           <button data-v="1" class="on">On</button><button data-v="0">Off</button></div></div>
         <div><label>Output</label><div class="seg" id="segOut">
@@ -269,10 +269,10 @@ async function pollStatus(id, onStage){
     else if (s==="IN_PROGRESS") onStage(j.output && j.output.stage ? j.output.stage
              : (typeof j.status==="string" && j.progress) ? j.progress : "Processing…", true);
     else if (s==="COMPLETED"){
-      if (j.output && j.output.error) throw {kind:"handler", err:j.output.error};
+      if (j.output && j.output.ok===false) throw {kind:"handler", err:{code:j.output.code, message:j.output.message}};
       return j.output;
     }
-    else if (s==="FAILED") throw {kind:"failed", msg:(j.output&&j.output.error&&j.output.error.message)||j.error||"job failed"};
+    else if (s==="FAILED") throw {kind:"failed", msg:(j.output&&(j.output.message||j.output.error))||j.error||"job failed"};
     else if (s==="CANCELLED") throw {kind:"cancelled"};
     else if (s==="TIMED_OUT") throw {kind:"timeout"};
     await sleep(2000);
