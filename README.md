@@ -12,13 +12,16 @@ frontend verified in a real browser → published on GitHub Pages.
 ## Live site → **https://justinwlin.github.io/upscaler/**
 
 Quickstart:
-1. Open the site → **Settings** → paste your **Runpod API key** + your **endpoint id** → Save.
+1. Open the site → **Settings** → paste your **Runpod API key** → Save. (The endpoint id is
+   already filled in with the default `pu8cjp4ot9gtpz`; change it if you deploy your own.)
 2. **Upscale** tab → drop / choose / paste an image → pick scale + face-enhance → **Upscale**.
+   (Missing key? The button routes you to Settings with a note instead of doing nothing.)
 3. First run after idle cold-starts a GPU worker (~1–2 min); warm runs are ~1 s.
-4. **Recent** tab shows your last ~48 h of results from any device (same key + endpoint id).
+4. **Recent** tab shows your last ~48 h of results from any device (same key).
 
 Deploy your own endpoint: see `scripts/deploy.sh` (build image → serverless template → endpoint
-with `--model-reference`). The key/endpoint id are entered in the browser — never committed.
+with `--model-reference`), then change the endpoint id in Settings. Only the **API key** is a
+secret — it's entered in the browser and never committed; the endpoint id is a non-secret default.
 
 ## Read order
 1. **`MODELS.md`** — model research: Real-ESRGAN+GFPGAN default (permissive licenses),
