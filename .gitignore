@@ -1,0 +1,9 @@
+# never commit images, keys, or generated output
+*.png
+*.jpg
+*.jpeg
+*.webp
+out/
+__pycache__/
+*.pyc
+.DS_Store
