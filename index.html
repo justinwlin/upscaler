@@ -123,6 +123,9 @@
       </div>
       <p class="cap" id="faceCap">Face enhance reconstructs plausible detail — great for looks,
         not forensic recovery. AuraSR is 4×-only with no face restoration.</p>
+      <div id="needcfg" class="stage err-box hidden">⚠ Paste your Runpod API key in <b>Settings</b>
+        first (the endpoint is already filled in), then hit Upscale. <button class="ghost" id="goSettings"
+        style="margin-left:10px">Open Settings</button></div>
       <div id="stage" class="stage hidden"></div>
       <div class="bar hidden" id="bar"><i></i></div>
     </div>
@@ -161,8 +164,9 @@ const state = { file:null, fileName:"image", scale:4, model:"realesrgan", face:1
                 beforeURL:null, afterBlobURL:null, lastResult:null };
 
 // ---- keys / settings ----
+const DEFAULT_EP = "pu8cjp4ot9gtpz";   // default endpoint (not a secret — useless without a valid key)
 function getKey(){ return localStorage.getItem(LS.key) || ""; }
-function getEp(){ return localStorage.getItem(LS.ep) || ""; }
+function getEp(){ return localStorage.getItem(LS.ep) || DEFAULT_EP; }
 $("#apikey").value = getKey(); $("#endpoint").value = getEp();
 $("#saveKeys").onclick = () => {
   localStorage.setItem(LS.key, $("#apikey").value.trim());
@@ -219,7 +223,13 @@ function setFile(f){
   drop.textContent = f.name || "pasted image";
   refreshGoState();
 }
-function refreshGoState(){ $("#go").disabled = !(state.file && getKey() && getEp()); }
+function haveCfg(){ return !!(getKey() && getEp()); }
+function refreshGoState(){
+  // Enable once an image is chosen; missing key/endpoint is surfaced as a banner, not a dead button.
+  $("#go").disabled = !state.file;
+  $("#needcfg").classList.toggle("hidden", haveCfg());
+}
+$("#goSettings").onclick = () => document.querySelector('.tab[data-tab="settings"]').click();
 refreshGoState(); onModelChange();
 
 // ---- client-side guard: downscale by pixels + re-encode JPEG under ~6MB ----
@@ -283,6 +293,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // ---- run flow ----
 $("#go").onclick = async () => {
   hideErr(); $("#resultPanel").classList.add("hidden");
+  if (!haveCfg()){ refreshGoState(); document.querySelector('.tab[data-tab="settings"]').click(); return; }
   $("#go").disabled=true; showStage("Preparing image…",true);
   try {
     const p = await prepImage(state.file);
