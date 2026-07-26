@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Zero third-party scripts. Strict CSP: only self + the Runpod API. The API key lives in
+     this browser's localStorage, so no external script is allowed to run and read it. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';
+               img-src 'self' data: blob:; connect-src https://api.runpod.ai; base-uri 'none';
+               form-action 'none'">
+<title>upscaler</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --fg:#e6e9ef; --mut:#93a0b4;
+          --acc:#4f8cff; --err:#ff5d6c; --ok:#3ad29f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex; gap:14px;
+           align-items:center; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; font-weight:650; letter-spacing:.2px; }
+  .tabs { margin-left:auto; display:flex; gap:6px; }
+  .tab { padding:6px 12px; border:1px solid var(--line); border-radius:8px; cursor:pointer;
+         color:var(--mut); background:transparent; }
+  .tab.active { color:var(--fg); border-color:var(--acc); }
+  main { max-width:1000px; margin:0 auto; padding:20px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+           padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--mut); margin:0 0 4px; }
+  input[type=text],input[type=password],select { width:100%; padding:9px 10px; background:#0d0f14;
+           border:1px solid var(--line); border-radius:8px; color:var(--fg); font-size:14px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:150px; }
+  .controls { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:12px; }
+  .controls .seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .controls .seg button { background:transparent; color:var(--mut); border:0; padding:7px 14px; cursor:pointer; }
+  .controls .seg button.on { background:var(--acc); color:#fff; }
+  button.primary { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:10px 18px;
+           font-size:15px; cursor:pointer; }
+  button.primary:disabled { opacity:.5; cursor:default; }
+  button.ghost { background:transparent; color:var(--mut); border:1px solid var(--line);
+           border-radius:8px; padding:8px 12px; cursor:pointer; }
+  #drop { border:2px dashed var(--line); border-radius:12px; padding:34px; text-align:center;
+          color:var(--mut); cursor:pointer; transition:.15s; }
+  #drop.hover { border-color:var(--acc); color:var(--fg); }
+  .mut { color:var(--mut); font-size:13px; }
+  .warn { color:var(--err); }
+  .stage { margin-top:12px; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+           background:#0d0f14; font-size:14px; }
+  .bar { height:4px; background:#0d0f14; border-radius:3px; overflow:hidden; margin-top:8px; }
+  .bar > i { display:block; height:100%; width:30%; background:var(--acc); transition:width .3s; }
+  .cmp { position:relative; width:100%; max-width:100%; overflow:hidden; border-radius:10px;
+         border:1px solid var(--line); background:#000; user-select:none; touch-action:none; }
+  .cmp img { display:block; width:100%; height:auto; }
+  .cmp .after { position:absolute; inset:0; }
+  .cmp .after img { position:absolute; inset:0; height:100%; object-fit:cover; }
+  .cmp .handle { position:absolute; top:0; bottom:0; width:2px; background:var(--acc); }
+  .cmp .handle::after { content:""; position:absolute; top:50%; left:50%; width:26px; height:26px;
+         transform:translate(-50%,-50%); border-radius:50%; background:var(--acc); }
+  .meta { display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; font-size:13px; color:var(--mut); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .grid .card { border:1px solid var(--line); border-radius:10px; overflow:hidden; cursor:pointer; background:#0d0f14; }
+  .grid .card img { width:100%; display:block; }
+  .grid .card .c { padding:6px 8px; font-size:11px; color:var(--mut); }
+  .hidden { display:none !important; }
+  .cap { font-size:12px; color:var(--mut); margin-top:6px; }
+  a.dl { color:var(--acc); text-decoration:none; }
+  .err-box { border-color:var(--err); color:var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>upscaler</h1>
+  <span class="mut">browser → your Runpod endpoint · no backend</span>
+  <div class="tabs">
+    <button class="tab active" data-tab="up">Upscale</button>
+    <button class="tab" data-tab="recent">Recent</button>
+    <button class="tab" data-tab="settings">Settings</button>
+  </div>
+</header>
+<main>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings" class="hidden">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label>Runpod API key <span class="mut">(stored in plaintext in this browser only)</span></label>
+          <input id="apikey" type="password" placeholder="rpa_...">
+        </div>
+        <div>
+          <label>Endpoint id</label>
+          <input id="endpoint" type="text" placeholder="e.g. abcd1234xyz">
+        </div>
+      </div>
+      <div class="controls">
+        <button class="primary" id="saveKeys">Save</button>
+        <button class="ghost" id="clearKey">Clear key / forget on this device</button>
+        <span id="settingsMsg" class="mut"></span>
+      </div>
+      <p class="cap">The key is sent only as the <code>Authorization: Bearer</code> header to
+        api.runpod.ai and is never validated or stored by this site. Anyone able to invoke your
+        endpoint can see all results in Recent — don't share the key.</p>
+    </div>
+  </section>
+
+  <!-- UPSCALE -->
+  <section id="tab-up">
+    <div class="panel">
+      <div id="drop">Drop an image, click to choose, or paste (⌘/Ctrl-V) a screenshot
+        <input id="file" type="file" accept="image/*" class="hidden">
+      </div>
+      <div class="controls">
+        <div><label>Scale</label><div class="seg" id="segScale">
+          <button data-v="2">2×</button><button data-v="4" class="on">4×</button></div></div>
+        <div><label>Model</label><div class="seg" id="segModel">
+          <button data-v="realesrgan" class="on">Real-ESRGAN</button><button data-v="aurasr">AuraSR</button></div></div>
+        <div><label>Face enhance</label><div class="seg" id="segFace">
+          <button data-v="1" class="on">On</button><button data-v="0">Off</button></div></div>
+        <div><label>Output</label><div class="seg" id="segOut">
+          <button data-v="png" class="on">PNG</button><button data-v="jpg">JPG</button></div></div>
+        <button class="primary" id="go" disabled>Upscale</button>
+      </div>
+      <p class="cap" id="faceCap">Face enhance reconstructs plausible detail — great for looks,
+        not forensic recovery. AuraSR is 4×-only with no face restoration.</p>
+      <div id="stage" class="stage hidden"></div>
+      <div class="bar hidden" id="bar"><i></i></div>
+    </div>
+
+    <div class="panel hidden" id="resultPanel">
+      <div class="cmp" id="cmp">
+        <img id="beforeImg" alt="before">
+        <div class="after" id="afterWrap"><img id="afterImg" alt="after"></div>
+        <div class="handle" id="handle" style="left:50%"></div>
+      </div>
+      <div class="meta" id="resultMeta"></div>
+      <div class="cap" id="resultCap"></div>
+      <div class="controls"><a class="dl" id="download" download>⬇ Download</a></div>
+    </div>
+  </section>
+
+  <!-- RECENT -->
+  <section id="tab-recent" class="hidden">
+    <div class="panel">
+      <div class="controls">
+        <button class="ghost" id="refreshRecent">Refresh</button>
+        <span class="mut">Kept ~48h on your endpoint's volume. Paste the same key on any device.</span>
+      </div>
+      <div id="recentMsg" class="mut" style="margin-top:10px"></div>
+      <div class="grid" id="recentGrid" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+</main>
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const LS = { key:"up_apikey", ep:"up_endpoint" };
+const state = { file:null, fileName:"image", scale:4, model:"realesrgan", face:1, out:"png",
+                beforeURL:null, afterBlobURL:null, lastResult:null };
+
+// ---- keys / settings ----
+function getKey(){ return localStorage.getItem(LS.key) || ""; }
+function getEp(){ return localStorage.getItem(LS.ep) || ""; }
+$("#apikey").value = getKey(); $("#endpoint").value = getEp();
+$("#saveKeys").onclick = () => {
+  localStorage.setItem(LS.key, $("#apikey").value.trim());
+  localStorage.setItem(LS.ep, $("#endpoint").value.trim());
+  $("#settingsMsg").textContent = "Saved."; setTimeout(()=>$("#settingsMsg").textContent="",1500);
+  refreshGoState();
+};
+$("#clearKey").onclick = () => {
+  localStorage.removeItem(LS.key); $("#apikey").value="";
+  $("#settingsMsg").textContent = "Key cleared."; refreshGoState();
+};
+
+// ---- tabs ----
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active");
+  for (const name of ["up","recent","settings"])
+    $("#tab-"+name).classList.toggle("hidden", name !== t.dataset.tab);
+  if (t.dataset.tab === "recent") loadRecent();
+});
+
+// ---- segmented controls ----
+function seg(id, key, cast){ const el=$(id);
+  el.querySelectorAll("button").forEach(b => b.onclick = () => {
+    el.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); state[key] = cast(b.dataset.v); onModelChange();
+  });
+}
+seg("#segScale","scale",Number); seg("#segModel","model",String);
+seg("#segFace","face",Number); seg("#segOut","out",String);
+function onModelChange(){
+  // AuraSR: 4x-only, no face restoration → reflect in UI
+  const aura = state.model==="aurasr";
+  $("#segScale").querySelectorAll("button").forEach(b=>{
+    const two=b.dataset.v==="2"; b.disabled = aura&&two;
+    if(aura&&two&&b.classList.contains("on")){ b.classList.remove("on");
+      $('#segScale button[data-v="4"]').classList.add("on"); state.scale=4; }
+  });
+  $("#segFace").querySelectorAll("button").forEach(b=>b.disabled=aura);
+  if(aura){ state.face=0; }
+}
+
+// ---- input: drop / click / paste ----
+const drop=$("#drop");
+drop.onclick=()=>$("#file").click();
+$("#file").onchange=e=>{ if(e.target.files[0]) setFile(e.target.files[0]); };
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("hover");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("hover");}));
+drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) setFile(f); });
+window.addEventListener("paste",e=>{ for(const it of (e.clipboardData||{}).files||[]){ if(it.type.startsWith("image/")){ setFile(it); break; } } });
+
+function setFile(f){
+  state.file=f; state.fileName=(f.name||"image").replace(/\.[^.]+$/,"");
+  drop.textContent = f.name || "pasted image";
+  refreshGoState();
+}
+function refreshGoState(){ $("#go").disabled = !(state.file && getKey() && getEp()); }
+refreshGoState(); onModelChange();
+
+// ---- client-side guard: downscale by pixels + re-encode JPEG under ~6MB ----
+const MAX_MP = 12, TARGET_BYTES = 6*1024*1024;
+async function prepImage(file){
+  const bmp = await createImageBitmap(file);
+  let {width:w, height:h} = bmp;
+  const mp = (w*h)/1e6;
+  let notice = "";
+  if (mp > MAX_MP){ const s=Math.sqrt(MAX_MP/mp); w=Math.round(w*s); h=Math.round(h*s);
+    notice = `Downscaled to ${w}×${h} (input was ${(mp).toFixed(1)}MP) to fit the upload limit.`; }
+  const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+  cv.getContext("2d").drawImage(bmp,0,0,w,h);
+  // try PNG if small enough (lossless), else JPEG at decreasing quality
+  let blob = await new Promise(r=>cv.toBlob(r,"image/png"));
+  if (blob.size > TARGET_BYTES){
+    for (let q=0.92;q>=0.4;q-=0.1){ blob=await new Promise(r=>cv.toBlob(r,"image/jpeg",q));
+      if (blob.size<=TARGET_BYTES) break; }
+  }
+  const b64 = await blobToB64(blob);
+  return { b64, w, h, notice, previewURL: URL.createObjectURL(file) };
+}
+const blobToB64 = blob => new Promise((res,rej)=>{ const r=new FileReader();
+  r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(blob); });
+
+// ---- API ----
+function api(path){ return `https://api.runpod.ai/v2/${getEp()}/${path}`; }
+function authHdr(){ return { "Authorization":"Bearer "+getKey(), "Content-Type":"application/json" }; }
+async function runJob(input){
+  const r = await fetch(api("run"), {method:"POST", headers:authHdr(), body:JSON.stringify({input})});
+  if (r.status===401) throw {kind:"auth"};
+  if (!r.ok) throw {kind:"http", status:r.status, msg:await r.text()};
+  return (await r.json()).id;
+}
+async function pollStatus(id, onStage){
+  let misses=0;
+  for(;;){
+    let j;
+    try { const r=await fetch(api("status/"+id),{headers:authHdr()});
+      if (r.status===401) throw {kind:"auth"};
+      if (!r.ok){ misses++; if(misses>5) throw {kind:"http",status:r.status,msg:await r.text()};
+        await sleep(2000*misses); continue; }
+      j=await r.json(); misses=0;
+    } catch(e){ if(e.kind) throw e; misses++; if(misses>5) throw {kind:"net"}; await sleep(2000); continue; }
+    const s=j.status;
+    if (s==="IN_QUEUE") onStage("Starting a GPU worker — first run can take ~1–2 min…", true);
+    else if (s==="IN_PROGRESS") onStage(j.output && j.output.stage ? j.output.stage
+             : (typeof j.status==="string" && j.progress) ? j.progress : "Processing…", true);
+    else if (s==="COMPLETED"){
+      if (j.output && j.output.error) throw {kind:"handler", err:j.output.error};
+      return j.output;
+    }
+    else if (s==="FAILED") throw {kind:"failed", msg:(j.output&&j.output.error&&j.output.error.message)||j.error||"job failed"};
+    else if (s==="CANCELLED") throw {kind:"cancelled"};
+    else if (s==="TIMED_OUT") throw {kind:"timeout"};
+    await sleep(2000);
+  }
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ---- run flow ----
+$("#go").onclick = async () => {
+  hideErr(); $("#resultPanel").classList.add("hidden");
+  $("#go").disabled=true; showStage("Preparing image…",true);
+  try {
+    const p = await prepImage(state.file);
+    if (p.notice) showStage(p.notice, true);
+    const input = { mode:"upscale", image_b64:p.b64, scale:state.scale,
+                    face_enhance:!!state.face, model:state.model, output:state.out };
+    const id = await runJob(input);
+    const out = await pollStatus(id, (m)=>showStage(m,true));
+    await showResult(out, p.previewURL);
+    showStage("Done.", false);
+  } catch(e){ showError(e); }
+  finally { $("#go").disabled=false; }
+};
+
+function showStage(msg, busy){ const s=$("#stage"); s.classList.remove("hidden","err-box");
+  s.textContent=msg; $("#bar").classList.toggle("hidden",!busy); }
+function hideErr(){ $("#stage").classList.remove("err-box"); }
+function showError(e){
+  const s=$("#stage"); s.classList.remove("hidden"); s.classList.add("err-box");
+  $("#bar").classList.add("hidden");
+  const map={ auth:"Runpod rejected the key (401). Check your API key in Settings.",
+    net:"Network error reaching api.runpod.ai. Check connection / CORS and retry.",
+    cancelled:"Job was cancelled.", timeout:"Job timed out on Runpod." };
+  if(e.kind==="handler") s.textContent="Error: "+(e.err.message||e.err.code||"handler error");
+  else if(e.kind==="failed") s.textContent="Job failed: "+e.msg;
+  else if(e.kind==="http") s.textContent=`Runpod HTTP ${e.status}: ${e.msg}`;
+  else s.textContent=map[e.kind]||("Unexpected error: "+(e.message||JSON.stringify(e)));
+}
+
+// ---- assemble result (inline or chunked fetch) ----
+async function fetchBlob(job_dir, ext, total){
+  const parts=[]; let off=0;
+  while(true){
+    const id=await runJob({mode:"fetch", job_dir, offset:off, length:1572864});
+    const out=await pollStatus(id, ()=>{});
+    parts.push(b64ToBytes(out.data_b64)); off+=out.bytes;
+    showStage(`Downloading… ${Math.round(off/1024)}KB`, true);
+    if(out.eof) break;
+  }
+  return new Blob(parts, {type: ext==="png"?"image/png":"image/jpeg"});
+}
+function b64ToBytes(b64){ const bin=atob(b64); const a=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a; }
+
+async function showResult(out, beforeURL){
+  const ext=out.ext||"png";
+  let blob;
+  if (out.image_b64) blob=new Blob([b64ToBytes(out.image_b64)],{type:ext==="png"?"image/png":"image/jpeg"});
+  else blob=await fetchBlob(out.job_dir, ext, out.bytes);
+  if (state.afterBlobURL) URL.revokeObjectURL(state.afterBlobURL);
+  const afterURL=URL.createObjectURL(blob); state.afterBlobURL=afterURL; state.lastResult=out;
+  $("#beforeImg").src=beforeURL; $("#afterImg").src=afterURL;
+  const dl=$("#download"); dl.href=afterURL;
+  dl.download=`${state.fileName}_${out.scale||state.scale}x_${out.model||state.model}.${ext}`;
+  $("#resultMeta").innerHTML =
+    `<span>in: ${out.in_width}×${out.in_height}</span><span>out: ${out.width}×${out.height}</span>`+
+    `<span>scale: ${out.scale||state.scale}×</span><span>${(out.bytes/1048576).toFixed(2)} MB · ${ext.toUpperCase()}</span>`;
+  $("#resultCap").textContent = (out.face_enhance)
+    ? "Face detail is reconstructed, not recovered." : "";
+  $("#resultPanel").classList.remove("hidden");
+  setupSlider();
+}
+
+// ---- before/after slider (clip-path, pointer+touch) ----
+function setupSlider(){
+  const cmp=$("#cmp"), after=$("#afterWrap"), handle=$("#handle");
+  const set=x=>{ const r=cmp.getBoundingClientRect(); let p=(x-r.left)/r.width; p=Math.max(0,Math.min(1,p));
+    after.style.clipPath=`inset(0 ${(1-p)*100}% 0 0)`; handle.style.left=(p*100)+"%"; };
+  set(cmp.getBoundingClientRect().left + cmp.getBoundingClientRect().width/2);
+  let drag=false;
+  const down=e=>{drag=true; move(e);}, up=()=>drag=false;
+  const move=e=>{ if(!drag)return; const x=(e.touches?e.touches[0].clientX:e.clientX); set(x); };
+  cmp.onpointerdown=down; window.onpointermove=move; window.onpointerup=up;
+  cmp.ontouchstart=down; cmp.ontouchmove=move; cmp.ontouchend=up;
+}
+
+// ---- Recent ----
+async function loadRecent(){
+  const grid=$("#recentGrid"); grid.innerHTML="";
+  if(!getKey()||!getEp()){ $("#recentMsg").textContent="Set your key + endpoint in Settings first."; return; }
+  $("#recentMsg").textContent="Loading…";
+  try{
+    const id=await runJob({mode:"list"});
+    const out=await pollStatus(id, ()=>{});
+    const jobs=(out.jobs||[]);
+    $("#recentMsg").textContent = jobs.length? `${jobs.length} recent result(s).` : "Nothing in the last ~48h.";
+    for(const j of jobs){
+      const card=document.createElement("div"); card.className="card";
+      card.innerHTML=`<img src="data:image/jpeg;base64,${j.thumb_b64}"><div class="c">${j.width}×${j.height} · ${(j.bytes/1048576).toFixed(1)}MB</div>`;
+      card.onclick=async()=>{ $("#recentMsg").textContent="Fetching…";
+        try{ const blob=await fetchBlob(j.job_dir, j.ext||"png", j.bytes);
+          const url=URL.createObjectURL(blob); const a=document.createElement("a");
+          a.href=url; a.download=`upscaled_${j.job_dir}.${j.ext||"png"}`; a.click();
+          setTimeout(()=>URL.revokeObjectURL(url),4000); $("#recentMsg").textContent="Downloaded.";
+        }catch(e){ showRecentErr(e); } };
+      grid.appendChild(card);
+    }
+  }catch(e){ showRecentErr(e); }
+}
+function showRecentErr(e){ $("#recentMsg").textContent = e.kind==="auth" ? "Key rejected (401)."
+  : e.kind==="net" ? "Network error." : ("Error: "+(e.msg||e.err&&e.err.message||e.kind||"failed")); }
+$("#refreshRecent").onclick=loadRecent;
+})();
+</script>
+</body>
+</html>
