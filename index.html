@@ -89,8 +89,12 @@
           <input id="apikey" type="password" placeholder="rpa_...">
         </div>
         <div>
-          <label>Endpoint id</label>
+          <label>Endpoint id <span class="mut">(fast · Real-ESRGAN)</span></label>
           <input id="endpoint" type="text" placeholder="e.g. abcd1234xyz">
+        </div>
+        <div>
+          <label>SUPIR endpoint id <span class="mut">(max quality · slow)</span></label>
+          <input id="supirEndpoint" type="text" placeholder="optional">
         </div>
       </div>
       <div class="controls">
@@ -114,7 +118,7 @@
         <div><label>Scale</label><div class="seg" id="segScale">
           <button data-v="2">2×</button><button data-v="4" class="on">4×</button></div></div>
         <div><label>Model</label><div class="seg" id="segModel">
-          <button data-v="realesrgan" class="on">Real-ESRGAN</button><button data-v="aurasr" disabled title="coming soon">AuraSR (soon)</button></div></div>
+          <button data-v="realesrgan" class="on">Real-ESRGAN</button><button data-v="supir" title="SDXL diffusion — max quality, ~2-3 min">SUPIR</button></div></div>
         <div><label>Face enhance</label><div class="seg" id="segFace">
           <button data-v="1" class="on">On</button><button data-v="0">Off</button></div></div>
         <div><label>Output</label><div class="seg" id="segOut">
@@ -159,18 +163,21 @@
 (() => {
 "use strict";
 const $ = s => document.querySelector(s);
-const LS = { key:"up_apikey", ep:"up_endpoint" };
+const LS = { key:"up_apikey", ep:"up_endpoint", supirEp:"up_supir_endpoint" };
 const state = { file:null, fileName:"image", scale:4, model:"realesrgan", face:1, out:"png",
                 beforeURL:null, afterBlobURL:null, lastResult:null };
 
 // ---- keys / settings ----
-const DEFAULT_EP = "pu8cjp4ot9gtpz";   // default endpoint (not a secret — useless without a valid key)
+const DEFAULT_EP = "pu8cjp4ot9gtpz";        // fast Real-ESRGAN endpoint
+const DEFAULT_SUPIR_EP = "lg51p96kiru7jf";  // SUPIR "max quality" endpoint
 function getKey(){ return localStorage.getItem(LS.key) || ""; }
 function getEp(){ return localStorage.getItem(LS.ep) || DEFAULT_EP; }
-$("#apikey").value = getKey(); $("#endpoint").value = getEp();
+function getSupirEp(){ return localStorage.getItem(LS.supirEp) || DEFAULT_SUPIR_EP; }
+$("#apikey").value = getKey(); $("#endpoint").value = getEp(); $("#supirEndpoint").value = getSupirEp();
 $("#saveKeys").onclick = () => {
   localStorage.setItem(LS.key, $("#apikey").value.trim());
   localStorage.setItem(LS.ep, $("#endpoint").value.trim());
+  localStorage.setItem(LS.supirEp, $("#supirEndpoint").value.trim());
   $("#settingsMsg").textContent = "Saved."; setTimeout(()=>$("#settingsMsg").textContent="",1500);
   refreshGoState();
 };
@@ -198,15 +205,14 @@ function seg(id, key, cast){ const el=$(id);
 seg("#segScale","scale",Number); seg("#segModel","model",String);
 seg("#segFace","face",Number); seg("#segOut","out",String);
 function onModelChange(){
-  // AuraSR: 4x-only, no face restoration → reflect in UI
-  const aura = state.model==="aurasr";
-  $("#segScale").querySelectorAll("button").forEach(b=>{
-    const two=b.dataset.v==="2"; b.disabled = aura&&two;
-    if(aura&&two&&b.classList.contains("on")){ b.classList.remove("on");
-      $('#segScale button[data-v="4"]').classList.add("on"); state.scale=4; }
-  });
-  $("#segFace").querySelectorAll("button").forEach(b=>b.disabled=aura);
-  if(aura){ state.face=0; }
+  // SUPIR: SDXL diffusion, no GFPGAN face pass; slow. Face toggle N/A.
+  const supir = state.model==="supir";
+  $("#segFace").querySelectorAll("button").forEach(b=>b.disabled=supir);
+  if(supir){ state.face=0; }
+  $("#faceCap").innerHTML = supir
+    ? "SUPIR = SDXL diffusion restoration: highest quality on degraded photos, but ~2–3 min/image "
+      + "and reconstructs detail generatively. Needs the SUPIR endpoint set in Settings."
+    : "Face enhance reconstructs plausible detail — great for looks, not forensic recovery.";
 }
 
 // ---- input: drop / click / paste ----
@@ -255,20 +261,21 @@ async function prepImage(file){
 const blobToB64 = blob => new Promise((res,rej)=>{ const r=new FileReader();
   r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(blob); });
 
-// ---- API ----
-function api(path){ return `https://api.runpod.ai/v2/${getEp()}/${path}`; }
+// ---- API (routed per endpoint: fast Real-ESRGAN vs SUPIR) ----
+function api(path, ep){ return `https://api.runpod.ai/v2/${ep||getEp()}/${path}`; }
+function epForModel(m){ return m==="supir" ? getSupirEp() : getEp(); }
 function authHdr(){ return { "Authorization":"Bearer "+getKey(), "Content-Type":"application/json" }; }
-async function runJob(input){
-  const r = await fetch(api("run"), {method:"POST", headers:authHdr(), body:JSON.stringify({input})});
+async function runJob(input, ep){
+  const r = await fetch(api("run",ep), {method:"POST", headers:authHdr(), body:JSON.stringify({input})});
   if (r.status===401) throw {kind:"auth"};
   if (!r.ok) throw {kind:"http", status:r.status, msg:await r.text()};
   return (await r.json()).id;
 }
-async function pollStatus(id, onStage){
+async function pollStatus(id, onStage, ep){
   let misses=0;
   for(;;){
     let j;
-    try { const r=await fetch(api("status/"+id),{headers:authHdr()});
+    try { const r=await fetch(api("status/"+id,ep),{headers:authHdr()});
       if (r.status===401) throw {kind:"auth"};
       if (!r.ok){ misses++; if(misses>5) throw {kind:"http",status:r.status,msg:await r.text()};
         await sleep(2000*misses); continue; }
@@ -294,15 +301,20 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 $("#go").onclick = async () => {
   hideErr(); $("#resultPanel").classList.add("hidden");
   if (!haveCfg()){ refreshGoState(); document.querySelector('.tab[data-tab="settings"]').click(); return; }
+  const ep = epForModel(state.model);
+  if (state.model==="supir" && (!ep || ep==="SUPIR_EP_PLACEHOLDER")){
+    document.querySelector('.tab[data-tab="settings"]').click();
+    return void alert("Set your SUPIR endpoint id in Settings to use the max-quality model.");
+  }
   $("#go").disabled=true; showStage("Preparing image…",true);
   try {
     const p = await prepImage(state.file);
     if (p.notice) showStage(p.notice, true);
     const input = { mode:"upscale", image_b64:p.b64, scale:state.scale,
                     face_enhance:!!state.face, model:state.model, output:state.out };
-    const id = await runJob(input);
-    const out = await pollStatus(id, (m)=>showStage(m,true));
-    await showResult(out, p.previewURL);
+    const id = await runJob(input, ep);
+    const out = await pollStatus(id, (m)=>showStage(m,true), ep);
+    await showResult(out, p.previewURL, ep);
     showStage("Done.", false);
   } catch(e){ showError(e); }
   finally { $("#go").disabled=false; }
@@ -324,11 +336,11 @@ function showError(e){
 }
 
 // ---- assemble result (inline or chunked fetch) ----
-async function fetchBlob(job_dir, ext, total){
+async function fetchBlob(job_dir, ext, total, ep){
   const parts=[]; let off=0;
   while(true){
-    const id=await runJob({mode:"fetch", job_dir, offset:off, length:1572864});
-    const out=await pollStatus(id, ()=>{});
+    const id=await runJob({mode:"fetch", job_dir, offset:off, length:1572864}, ep);
+    const out=await pollStatus(id, ()=>{}, ep);
     parts.push(b64ToBytes(out.data_b64)); off+=out.bytes;
     showStage(`Downloading… ${Math.round(off/1024)}KB`, true);
     if(out.eof) break;
@@ -338,11 +350,11 @@ async function fetchBlob(job_dir, ext, total){
 function b64ToBytes(b64){ const bin=atob(b64); const a=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a; }
 
-async function showResult(out, beforeURL){
+async function showResult(out, beforeURL, ep){
   const ext=out.ext||"png";
   let blob;
   if (out.image_b64) blob=new Blob([b64ToBytes(out.image_b64)],{type:ext==="png"?"image/png":"image/jpeg"});
-  else blob=await fetchBlob(out.job_dir, ext, out.bytes);
+  else blob=await fetchBlob(out.job_dir, ext, out.bytes, ep);
   if (state.afterBlobURL) URL.revokeObjectURL(state.afterBlobURL);
   const afterURL=URL.createObjectURL(blob); state.afterBlobURL=afterURL; state.lastResult=out;
   $("#beforeImg").src=beforeURL; $("#afterImg").src=afterURL;
@@ -351,8 +363,9 @@ async function showResult(out, beforeURL){
   $("#resultMeta").innerHTML =
     `<span>in: ${out.in_width}×${out.in_height}</span><span>out: ${out.width}×${out.height}</span>`+
     `<span>scale: ${out.scale||state.scale}×</span><span>${(out.bytes/1048576).toFixed(2)} MB · ${ext.toUpperCase()}</span>`;
-  $("#resultCap").textContent = (out.face_enhance)
-    ? "Face detail is reconstructed, not recovered." : "";
+  $("#resultCap").textContent = out.model==="supir"
+    ? "SUPIR reconstructs detail generatively — a plausible restoration, not a literal recovery."
+    : (out.face_enhance ? "Face detail is reconstructed, not recovered." : "");
   $("#resultPanel").classList.remove("hidden");
   setupSlider();
 }
@@ -375,23 +388,29 @@ async function loadRecent(){
   const grid=$("#recentGrid"); grid.innerHTML="";
   if(!getKey()||!getEp()){ $("#recentMsg").textContent="Set your key + endpoint in Settings first."; return; }
   $("#recentMsg").textContent="Loading…";
-  try{
-    const id=await runJob({mode:"list"});
-    const out=await pollStatus(id, ()=>{});
-    const jobs=(out.jobs||[]);
-    $("#recentMsg").textContent = jobs.length? `${jobs.length} recent result(s).` : "Nothing in the last ~48h.";
-    for(const j of jobs){
-      const card=document.createElement("div"); card.className="card";
-      card.innerHTML=`<img src="data:image/jpeg;base64,${j.thumb_b64}"><div class="c">${j.width}×${j.height} · ${(j.bytes/1048576).toFixed(1)}MB</div>`;
-      card.onclick=async()=>{ $("#recentMsg").textContent="Fetching…";
-        try{ const blob=await fetchBlob(j.job_dir, j.ext||"png", j.bytes);
-          const url=URL.createObjectURL(blob); const a=document.createElement("a");
-          a.href=url; a.download=`upscaled_${j.job_dir}.${j.ext||"png"}`; a.click();
-          setTimeout(()=>URL.revokeObjectURL(url),4000); $("#recentMsg").textContent="Downloaded.";
-        }catch(e){ showRecentErr(e); } };
-      grid.appendChild(card);
-    }
-  }catch(e){ showRecentErr(e); }
+  // query both endpoints (fast + SUPIR if configured); tag each job with its endpoint for fetch
+  const eps=[{ep:getEp(),tier:"fast"}];
+  const sep=getSupirEp(); if(sep && sep!=="SUPIR_EP_PLACEHOLDER") eps.push({ep:sep,tier:"supir"});
+  let jobs=[];
+  for(const {ep,tier} of eps){
+    try{ const id=await runJob({mode:"list"}, ep); const out=await pollStatus(id, ()=>{}, ep);
+      for(const j of (out.jobs||[])){ j._ep=ep; j._tier=tier; jobs.push(j); }
+    }catch(e){ /* one tier down shouldn't kill the other */ }
+  }
+  jobs.sort((a,b)=>(b.created||0)-(a.created||0));
+  $("#recentMsg").textContent = jobs.length? `${jobs.length} recent result(s).` : "Nothing in the last ~48h.";
+  for(const j of jobs){
+    const card=document.createElement("div"); card.className="card";
+    const tag = j._tier==="supir" ? " · SUPIR" : "";
+    card.innerHTML=`<img src="data:image/jpeg;base64,${j.thumb_b64}"><div class="c">${j.width}×${j.height} · ${(j.bytes/1048576).toFixed(1)}MB${tag}</div>`;
+    card.onclick=async()=>{ $("#recentMsg").textContent="Fetching…";
+      try{ const blob=await fetchBlob(j.job_dir, j.ext||"png", j.bytes, j._ep);
+        const url=URL.createObjectURL(blob); const a=document.createElement("a");
+        a.href=url; a.download=`upscaled_${j.job_dir}.${j.ext||"png"}`; a.click();
+        setTimeout(()=>URL.revokeObjectURL(url),4000); $("#recentMsg").textContent="Downloaded.";
+      }catch(e){ showRecentErr(e); } };
+    grid.appendChild(card);
+  }
 }
 function showRecentErr(e){ $("#recentMsg").textContent = e.kind==="auth" ? "Key rejected (401)."
   : e.kind==="net" ? "Network error." : ("Error: "+(e.msg||e.err&&e.err.message||e.kind||"failed")); }
