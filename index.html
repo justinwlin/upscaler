@@ -126,7 +126,7 @@
         <button class="primary" id="go" disabled>Upscale</button>
       </div>
       <p class="cap" id="faceCap">Face enhance reconstructs plausible detail — great for looks,
-        not forensic recovery. AuraSR is 4×-only with no face restoration.</p>
+        not forensic recovery.</p>
       <div id="needcfg" class="stage err-box hidden">⚠ Paste your Runpod API key in <b>Settings</b>
         first (the endpoint is already filled in), then hit Upscale. <button class="ghost" id="goSettings"
         style="margin-left:10px">Open Settings</button></div>
@@ -169,7 +169,7 @@ const state = { file:null, fileName:"image", scale:4, model:"realesrgan", face:1
 
 // ---- keys / settings ----
 const DEFAULT_EP = "pu8cjp4ot9gtpz";        // fast Real-ESRGAN endpoint
-const DEFAULT_SUPIR_EP = "lg51p96kiru7jf";  // SUPIR "max quality" endpoint
+const DEFAULT_SUPIR_EP = "joeqht93hect8j";  // SUPIR "max quality" endpoint
 function getKey(){ return localStorage.getItem(LS.key) || ""; }
 function getEp(){ return localStorage.getItem(LS.ep) || DEFAULT_EP; }
 function getSupirEp(){ return localStorage.getItem(LS.supirEp) || DEFAULT_SUPIR_EP; }

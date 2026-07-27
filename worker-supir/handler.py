@@ -34,9 +34,11 @@ def get_model():
     """Cold-start: build SUPIR once, mirror test.py's setup (half params + tiled VAE)."""
     global _MODEL
     if _MODEL is None:
-        import torch
-        from SUPIR.util import create_SUPIR_model, convert_dtype
+        import sys, torch
+        if "/app/SUPIR" not in sys.path:
+            sys.path.insert(0, "/app/SUPIR")   # repo root, so `import SUPIR` resolves
         os.chdir("/app/SUPIR")   # config uses relative paths (options/SUPIR_v0.yaml)
+        from SUPIR.util import create_SUPIR_model, convert_dtype
         m = create_SUPIR_model("options/SUPIR_v0.yaml", SUPIR_sign="Q")
         m.ae_dtype = convert_dtype("bf16")
         m.model.dtype = convert_dtype("fp16")

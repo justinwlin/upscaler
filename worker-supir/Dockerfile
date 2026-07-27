@@ -4,7 +4,7 @@
 # torch 2.2 / cu12.1 base -> deploy with --min-cuda-version 12.1.
 FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
-ENV DEBIAN_FRONTEND=noninteractive MODE_TO_RUN=serverless PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive MODE_TO_RUN=serverless PYTHONUNBUFFERED=1 PYTHONPATH=/app/SUPIR
 WORKDIR /app
 
 RUN git clone --depth 1 https://github.com/Fanghua-Yu/SUPIR.git /app/SUPIR
