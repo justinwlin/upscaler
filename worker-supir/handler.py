@@ -72,7 +72,7 @@ def run_supir(pil, scale):
     import torch
     from SUPIR.util import PIL2Tensor, Tensor2PIL
     model = get_model()
-    lq, h0, w0 = PIL2Tensor(pil, upscale=scale, min_size=1024)
+    lq, h0, w0 = PIL2Tensor(pil, upsacle=scale, min_size=1024)   # sic: SUPIR's param is misspelled
     lq = lq.unsqueeze(0).to("cuda")[:, :3, :, :]
     a_prompt = ("Cinematic, High Contrast, highly detailed, taken using a Canon EOS R camera, "
                 "hyper detailed photo-realistic maximum detail, 32k, Color Grading, ultra HD, "
