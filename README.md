@@ -16,6 +16,10 @@ Quickstart:
    already filled in with the default `pu8cjp4ot9gtpz`; change it if you deploy your own.)
 2. **Upscale** tab → drop / choose / paste an image → pick scale + face-enhance → **Upscale**.
    (Missing key? The button routes you to Settings with a note instead of doing nothing.)
+   - **Model = Real-ESRGAN** (default): fast (~1 s warm), real-world photos + faces.
+   - **Model = SUPIR** (max quality, slow): SDXL diffusion, ~4 min/image on its own endpoint
+     (`upscale-supir`, prefilled in Settings). Best on badly degraded images; reconstructs detail
+     generatively. Separate GPU tier — only costs money when you use it.
 3. First run after idle cold-starts a GPU worker (~1–2 min); warm runs are ~1 s.
 4. **Recent** tab shows your last ~48 h of results from any device (same key).
 
